@@ -48,7 +48,7 @@ let featureFileSplitter = function () {
             asts.forEach(ast => {
                 if (ast.feature != undefined || ast.feature != null) {
                     const featureTemplate = this.getFeatureTemplate(ast);
-                    const features = this.splitFeature(ast.feature.children, featureTemplate);
+                    const features = this.splitFeature(ast.feature.children, featureTemplate, options.splitScenarioOutLineMultipleExamples);
                     const filteredFeatures = this.filterFeaturesByTag(features, options.tagExpression);
                     if (filteredFeatures.length > 0) {
                         scenariosWithTagFound = true;
@@ -132,7 +132,7 @@ let featureFileSplitter = function () {
      * @return {Array} - list of features
      * @private
      */
-    this.splitFeature = function (scenarios, featureTemplate) {
+    this.splitFeature = function (scenarios, featureTemplate, splitScenarioOutLineMultipleExamples) {
 
         try {
             const scenarioOutLineWithExamples = [];
@@ -145,14 +145,13 @@ let featureFileSplitter = function () {
                             console.log("Gherkin syntax error : Missing examples for Scenario Outline :", scenario.name);
                             process.exit(0);
                         }
-                        if (scenario.examples.length > 1 && options.splitScenarioOutLineMultipleExamples == true) {
+                        if (scenario.examples.length > 1 && splitScenarioOutLineMultipleExamples == true) {
                             scenario.examples.forEach(example => {
-                                example.tableBody.map(row => {
-                                    const modifiedScenario = _.cloneDeep(scenarioTemplate);
-                                    modifiedScenario.examples[0].tableBody = [row];
+                                const modifiedScenario = _.cloneDeep(scenarioTemplate);
+                                    modifiedScenario.examples = [];
+                                    modifiedScenario.examples[0] = example;
                                     scenarioOutLineWithExamples.push(modifiedScenario);
-                                });
-                            });
+                            });                            
                         }
                         return scenario.examples[0].tableBody.map(row => {
                             const modifiedScenario = _.cloneDeep(scenarioTemplate);
@@ -161,17 +160,18 @@ let featureFileSplitter = function () {
                         })
                     } else return scenario
                 });
-            if (scenarioOutLineWithExamples.length > 0 && options.splitScenarioOutLineMultipleExamples == true) {
+            if (scenarioOutLineWithExamples.length > 0 && splitScenarioOutLineMultipleExamples == true) {
                 const modifiedScenarioWithExamples = [];
                 scenarioOutLineWithExamples.forEach(scenarioWithExample => {
                     _.flatten(scenarioWithExample).map(scenario => {
                         const feature = _.cloneDeep(featureTemplate);
                         const updatedScenario = _.cloneDeep(scenario);
-                        updatedScenario.tags = [...scenario.tags].concat(featureTemplate.feature.tags);
+                        updatedScenario.tags = [...scenario.tags].concat(featureTemplate.feature.tags).concat(scenario.examples[0]?.tags);
                         feature.feature.children.push(updatedScenario);
                         modifiedScenarioWithExamples.push(feature)
                     });
                 });
+                return modifiedScenarioWithExamples;
             } else {
                 return _.flatten(scenarioOutline)
                     .map(scenario => {
