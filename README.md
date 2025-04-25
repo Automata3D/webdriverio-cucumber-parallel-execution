@@ -1,4 +1,4 @@
-# wdio-cucumber-parallel-execution
+# webdriverio-cucumber-parallel-execution
 
 A WebdriverIO capability for running **Cucumber** scenarios within **Single/Multiple** Feature Files in parallel.
 
