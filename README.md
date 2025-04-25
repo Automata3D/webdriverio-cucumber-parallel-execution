@@ -14,7 +14,7 @@ Handles merging of reports out of the box and provides a consolidated JSON Repo
 # Installation
 
 ```
-npm install wdio-cucumber-parallel-execution --save-dev
+npm install webdriverio-cucumber-parallel-execution --save-dev
 ```
 
 # Architectural View
