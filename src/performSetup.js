@@ -10,7 +10,8 @@ const tmpFeatureFiles = new featureFileSplitter;
  * @param {string} [options.tagExpression] - Tag expression to parse
  * @param {string} [options.ff] - Feature File Name to parse
  * @param {string} [options.lang] - Language of sourceSpecDirectory
- * @param {Boolean} [options.cleanTmpSpecDirectory] - Boolean for cleaning the Temp Spec Directory 
+ * @param {Boolean} [options.cleanTmpSpecDirectory] - Boolean for cleaning the Temp Spec Directory
+ * @param {Boolean} [options.splitScenarioOutLineMultipleExamples] - Boolean for split ScenarioOutLine with Multiple Examples
  * @return {Promise<void>}
  */
 let performSetup = function (options) {
@@ -30,7 +31,8 @@ let performSetup = function (options) {
             tmpSpecDirectory: options.tmpSpecDirectory,
             tagExpression: options.tagExpression,
             ff: options.ff,
-            lang: options.lang
+            lang: options.lang,
+            splitScenarioOutLineMultipleExamples: options.splitScenarioOutLineMultipleExamples
         });
     } catch (e) {
         console.log('Error: ', e);

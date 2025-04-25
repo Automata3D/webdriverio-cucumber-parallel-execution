@@ -1,6 +1,6 @@
 {
   "name": "wdio-cucumber-parallel-execution",
-  "version": "3.6.15",
+  "version": "3.7.0-alpha",
   "description": "WebdriverIO Package to execute  Cucumber scenarios in parallel",
   "main": "index.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "feature",
     "scenario"
   ],
-  "author": "Simit Tomar",
+  "author": "somanadham.kolluru@gmail.com",
   "license": "MIT",
   "repository": {
     "type": "git",

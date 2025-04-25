@@ -18,6 +18,7 @@ var featureFileSplitter = function featureFileSplitter() {
      * @param {string} options.tmpSpecDirectory - path to temp folder
      * @param {string} [options.tagExpression] - tag expression to parse
      * @param {string} [options.lang] - language of sourceSpecDirectory
+     * @param {string} [options.splitScenarioOutLineMultipleExamples] - language of sourceSpecDirectory
      *
      * @return {Promise<void>}
      */
@@ -141,6 +142,7 @@ var featureFileSplitter = function featureFileSplitter() {
     this.splitFeature = function (scenarios, featureTemplate) {
 
         try {
+            var scenarioOutLineWithExamples = [];
             var scenarioOutline = scenarios.filter(function (scenario) {
                 return scenario.type !== "Background";
             }).map(function (scenario) {
@@ -150,6 +152,15 @@ var featureFileSplitter = function featureFileSplitter() {
                         console.log("Gherkin syntax error : Missing examples for Scenario Outline :", scenario.name);
                         process.exit(0);
                     }
+                    if (scenario.examples.length > 1 && options.splitScenarioOutLineMultipleExamples == true) {
+                        scenario.examples.forEach(function (example) {
+                            example.tableBody.map(function (row) {
+                                var modifiedScenario = _.cloneDeep(scenarioTemplate);
+                                modifiedScenario.examples[0].tableBody = [row];
+                                scenarioOutLineWithExamples.push(modifiedScenario);
+                            });
+                        });
+                    }
                     return scenario.examples[0].tableBody.map(function (row) {
                         var modifiedScenario = _.cloneDeep(scenarioTemplate);
                         modifiedScenario.examples[0].tableBody = [row];
@@ -157,14 +168,26 @@ var featureFileSplitter = function featureFileSplitter() {
                     });
                 } else return scenario;
             });
-
-            return _.flatten(scenarioOutline).map(function (scenario) {
-                var feature = _.cloneDeep(featureTemplate);
-                var updatedScenario = _.cloneDeep(scenario);
-                updatedScenario.tags = [].concat(_toConsumableArray(scenario.tags)).concat(featureTemplate.feature.tags);
-                feature.feature.children.push(updatedScenario);
-                return feature;
-            });
+            if (scenarioOutLineWithExamples.length > 0 && options.splitScenarioOutLineMultipleExamples == true) {
+                var modifiedScenarioWithExamples = [];
+                scenarioOutLineWithExamples.forEach(function (scenarioWithExample) {
+                    _.flatten(scenarioWithExample).map(function (scenario) {
+                        var feature = _.cloneDeep(featureTemplate);
+                        var updatedScenario = _.cloneDeep(scenario);
+                        updatedScenario.tags = [].concat(_toConsumableArray(scenario.tags)).concat(featureTemplate.feature.tags);
+                        feature.feature.children.push(updatedScenario);
+                        modifiedScenarioWithExamples.push(feature);
+                    });
+                });
+            } else {
+                return _.flatten(scenarioOutline).map(function (scenario) {
+                    var feature = _.cloneDeep(featureTemplate);
+                    var updatedScenario = _.cloneDeep(scenario);
+                    updatedScenario.tags = [].concat(_toConsumableArray(scenario.tags)).concat(featureTemplate.feature.tags);
+                    feature.feature.children.push(updatedScenario);
+                    return feature;
+                });
+            }
         } catch (e) {
             console.log('Error: ', e);
         }
