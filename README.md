@@ -69,7 +69,7 @@ wdio.conf.js
 
 ```
 const argv = require("yargs").argv;
-const wdioParallel = require('wdio-cucumber-parallel-execution');
+const wdioParallel = require('webdriverio-cucumber-parallel-execution');
 // The below module is used for cucumber html report generation
 const reporter = require('cucumber-html-reporter');
 const currentTime = new Date().toJSON().replace(/:/g, "-");
@@ -86,7 +86,8 @@ if (argv.parallel === 'true') {
     wdioParallel.performSetup({
         sourceSpecDirectory: sourceSpecDirectory,
         tmpSpecDirectory: tmpSpecDirectory,
-        cleanTmpSpecDirectory: true
+        cleanTmpSpecDirectory: true,
+        splitScenarioOutLineMultipleExamples: true
     });
     featureFilePath = `${tmpSpecDirectory}/*.feature`
 }
@@ -118,6 +119,7 @@ exports.config = {
      * @param {Object} config wdio configuration object
      * @param {Array.<Object>} capabilities list of capabilities details
      * @param {<Object>} results object containing test results
+     
      */
     onComplete: () => {
 
@@ -129,7 +131,7 @@ exports.config = {
             let jsonFile = `${parallelExecutionReportDirectory}report.json`;
             fs.writeFileSync(jsonFile, JSON.stringify(consolidatedJsonArray));
     
-            // The below code is not part of wdio-cucumber-parallel-execution module
+            // The below code is not part of webdriverio-cucumber-parallel-execution module
             // but is mentioned to show, how it can be used with other reporting modules
             var options = {
                 theme: 'bootstrap',
