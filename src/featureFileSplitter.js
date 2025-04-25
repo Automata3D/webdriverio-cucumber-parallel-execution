@@ -166,7 +166,10 @@ let featureFileSplitter = function () {
                     _.flatten(scenarioWithExample).map(scenario => {
                         const feature = _.cloneDeep(featureTemplate);
                         const updatedScenario = _.cloneDeep(scenario);
-                        updatedScenario.tags = [...scenario.tags].concat(featureTemplate.feature.tags).concat(scenario.examples[0]?.tags);
+                        updatedScenario.tags = [...scenario.tags].concat(featureTemplate.feature.tags);
+                        if(scenario.examples && scenario.examples.length > 1 && scenario.examples[0].tags) {
+                            updatedScenario.tags = updatedScenario.tags.concat(scenario.examples[0].tags);
+                        }
                         feature.feature.children.push(updatedScenario);
                         modifiedScenarioWithExamples.push(feature)
                     });
