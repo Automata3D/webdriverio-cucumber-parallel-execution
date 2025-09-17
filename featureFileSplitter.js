@@ -1,16 +1,13 @@
-"use strict";
+const fs = require('fs');
+const Gherkin = require("gherkin");
+const glob = require("glob");
+const parser = new (require("cucumber-tag-expressions").TagExpressionParser)();
+const path = require("path");
+const _ = require("lodash");
+const chalk = require('chalk');
 
-function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
 
-var fs = require('fs');
-var Gherkin = require("gherkin");
-var glob = require("glob");
-var parser = new (require("cucumber-tag-expressions").TagExpressionParser)();
-var path = require("path");
-var _ = require("lodash");
-var chalk = require('chalk');
-
-var featureFileSplitter = function featureFileSplitter() {
+let featureFileSplitter = function () {
 
     /**
      * Compile and create splitted files
@@ -23,8 +20,6 @@ var featureFileSplitter = function featureFileSplitter() {
      * @return {Promise<void>}
      */
     this.compile = function (options) {
-        var _this = this;
-
         try {
 
             if (!options.sourceSpecDirectory) {
@@ -36,46 +31,49 @@ var featureFileSplitter = function featureFileSplitter() {
             options.tagExpression = options.tagExpression || "";
             options.lang = options.lang || "en";
 
-            var filePaths = [];
+            let filePaths = [];
             if (options.ff == undefined) {
-                filePaths = glob.sync(options.sourceSpecDirectory + "/*.feature");
+                filePaths = glob.sync(`${options.sourceSpecDirectory}/*.feature`);
             } else {
-                var featureFile = options.sourceSpecDirectory + "/" + options.ff + ".feature";
+                const featureFile = `${options.sourceSpecDirectory}/${options.ff}.feature`;
                 filePaths.push(featureFile);
             }
 
-            var featureTexts = this.readFiles(filePaths);
-            var asts = this.parseGherkinFiles(featureTexts, options.lang);
+            const featureTexts = this.readFiles(filePaths);
+ 
+            const asts = this.parseGherkinFiles(featureTexts, options.lang);
             var i = 1;
             var fileSequence = 0;
             var scenariosWithTagFound = false;
-            asts.forEach(function (ast) {
+            asts.forEach(ast => {
+                
                 if (ast.feature != undefined || ast.feature != null) {
-                    var featureTemplate = _this.getFeatureTemplate(ast);
-                    var features = _this.splitFeature(ast.feature.children, featureTemplate, options.splitScenarioOutLineMultipleExamples);
-                    var filteredFeatures = _this.filterFeaturesByTag(features, options.tagExpression);
+                    const featureTemplate = this.getFeatureTemplate(ast);
+                    const features = this.splitFeature(ast.feature.children, featureTemplate, options.splitScenarioOutLineMultipleExamples, options.tagExpression);
+
+                    const filteredFeatures = this.filterFeaturesByTag(features, options.tagExpression);
                     if (filteredFeatures.length > 0) {
                         scenariosWithTagFound = true;
                     }
-                    filteredFeatures.forEach(function (splitFeature) {
-                        var splitFilePath = filePaths[fileSequence].split("/");
-                        var parentFileName = splitFilePath[splitFilePath.length - 1];
+                    filteredFeatures.forEach(splitFeature => {
+                        const splitFilePath = (filePaths[fileSequence]).split("/");
+                        let parentFileName = splitFilePath[splitFilePath.length - 1];
                         parentFileName = parentFileName.replace(".feature", "_");
-                        var fileName = parentFileName + i + '.feature';
+                        const fileName = parentFileName + i + '.feature';
                         i++;
-                        fs.writeFileSync(path.resolve(options.tmpSpecDirectory + "/" + fileName), _this.writeFeature(splitFeature.feature), "utf8");
+                        fs.writeFileSync(path.resolve(`${options.tmpSpecDirectory}/${fileName}`), this.writeFeature(splitFeature.feature), "utf8");
                     });
                     fileSequence++;
                 }
             });
 
             if (scenariosWithTagFound == false) {
-                console.log(chalk.bold.hex('#7D18FF')("No Feature File found for tha Tag Expression: " + options.tagExpression));
+                console.log(chalk.bold.hex('#7D18FF')(`No Feature File found for the Tag Expression: ${options.tagExpression}`));
             }
         } catch (e) {
             console.log('Error: ', e);
         }
-    };
+    }
 
     /**
      * Read file content by provided paths
@@ -85,13 +83,11 @@ var featureFileSplitter = function featureFileSplitter() {
      */
     this.readFiles = function (filePaths) {
         try {
-            return filePaths.map(function (filePath) {
-                return fs.readFileSync(filePath, "utf8");
-            });
+            return filePaths.map(filePath => fs.readFileSync(filePath, "utf8"))
         } catch (e) {
             console.log('Error: ', e);
         }
-    };
+    }
 
     /**
      * Parse gherkin files to ASTs
@@ -102,17 +98,17 @@ var featureFileSplitter = function featureFileSplitter() {
      */
     this.parseGherkinFiles = function (features, lang) {
         try {
-            var _parser = new Gherkin.Parser();
-            var matcher = new Gherkin.TokenMatcher(lang);
+            const parser = new Gherkin.Parser();
+            const matcher = new Gherkin.TokenMatcher(lang);
 
-            return features.map(function (feature) {
-                var scanner = new Gherkin.TokenScanner(feature);
-                return _parser.parse(scanner, matcher);
+            return features.map(feature => {
+                const scanner = new Gherkin.TokenScanner(feature);
+                return parser.parse(scanner, matcher)
             });
         } catch (e) {
             console.log('Error: ', e);
         }
-    };
+    }
 
     /**
      * Get feature template for splitting
@@ -122,77 +118,143 @@ var featureFileSplitter = function featureFileSplitter() {
      */
     this.getFeatureTemplate = function (feature) {
         try {
-            var featureTemplate = _.cloneDeep(feature);
-            featureTemplate.feature.children = featureTemplate.feature.children.filter(function (scenario) {
-                return scenario.type === "Background";
-            });
-            return featureTemplate;
+            const featureTemplate = _.cloneDeep(feature);
+            featureTemplate.feature.children = featureTemplate.feature.children.filter(scenario => scenario.type === "Background");
+            return featureTemplate
         } catch (e) {
             console.log('Error: ', e);
         }
-    };
+    }
 
     /**
      * Split feature
      * @param {Array} scenarios - list of scenarios
      * @param {Object} featureTemplate - template of feature
+     * @param {boolean} splitScenarioOutLineMultipleExamples - whether to split examples
      * @return {Array} - list of features
      * @private
      */
-    this.splitFeature = function (scenarios, featureTemplate, splitScenarioOutLineMultipleExamples) {
-
+    this.splitFeature = function (scenarios, featureTemplate, splitScenarioOutLineMultipleExamples, tagExpression) {
         try {
-            var scenarioOutLineWithExamples = [];
-            var scenarioOutline = scenarios.filter(function (scenario) {
-                return scenario.type !== "Background";
-            }).map(function (scenario) {
-                if (scenario.type === "ScenarioOutline") {
-                    var scenarioTemplate = _.cloneDeep(scenario);
-                    if (scenario.examples[0] == undefined || scenario.examples[0] == null) {
-                        console.log("Gherkin syntax error : Missing examples for Scenario Outline :", scenario.name);
-                        process.exit(0);
-                    }
-                    if (scenario.examples.length > 1 && splitScenarioOutLineMultipleExamples == true) {
-                        scenario.examples.forEach(function (example) {
-                            var modifiedScenario = _.cloneDeep(scenarioTemplate);
-                            modifiedScenario.examples = [];
-                            modifiedScenario.examples[0] = example;
-                            scenarioOutLineWithExamples.push(modifiedScenario);
-                        });
-                    }
-                    return scenario.examples[0].tableBody.map(function (row) {
-                        var modifiedScenario = _.cloneDeep(scenarioTemplate);
-                        modifiedScenario.examples[0].tableBody = [row];
-                        return modifiedScenario;
-                    });
-                } else return scenario;
-            });
-            if (scenarioOutLineWithExamples.length > 0 && splitScenarioOutLineMultipleExamples == true) {
-                var modifiedScenarioWithExamples = [];
-                scenarioOutLineWithExamples.forEach(function (scenarioWithExample) {
-                    _.flatten(scenarioWithExample).map(function (scenario) {
-                        var feature = _.cloneDeep(featureTemplate);
-                        var updatedScenario = _.cloneDeep(scenario);
-                        updatedScenario.tags = [].concat(_toConsumableArray(scenario.tags)).concat(featureTemplate.feature.tags);
-                        if (scenario.examples && scenario.examples.length > 1 && scenario.examples[0].tags) {
-                            updatedScenario.tags = updatedScenario.tags.concat(scenario.examples[0].tags);
+            // console.log('=== splitFeature input scenarios ===');
+            // scenarios.forEach((s, idx) => {
+            //     console.log(
+            //         idx,
+            //         s.type,
+            //         s.name,
+            //         'tags:', s.tags?.map(t => t.name),
+            //         'examples:', s.examples?.length
+            //     );
+            //     if (s.examples) {
+            //         s.examples.forEach((ex, exIdx) => {
+            //             console.log('  Example', exIdx,
+            //                 'tags:', ex.tags?.map(t => t.name),
+            //                 'rows:', ex.tableBody.map(r => r.cells.map(c => c.value))
+            //             );
+            //         });
+            //     }
+            // });
+
+            const features = [];
+
+            scenarios
+                .filter(scenario => scenario.type !== "Background")
+                .forEach(scenario => {
+                    if (scenario.type === "ScenarioOutline") {
+                        const scenarioTemplate = _.cloneDeep(scenario);
+
+                        if (!scenario.examples || scenario.examples.length === 0) {
+                            console.warn("Missing examples for Scenario Outline:", scenario.name);
+                            return;
                         }
+                        if ( splitScenarioOutLineMultipleExamples ) {
+                            // CASE 1: Tagged Examples → split and merge tags
+                            const hasTaggedExamples = scenario.examples.some(ex => ex.tags && ex.tags.length > 0);
+                            if (hasTaggedExamples) {
+                                scenario.examples.forEach(example => {
+                                    example.tableBody.forEach(row => {
+                                        const feature = _.cloneDeep(featureTemplate);
+                                        const updatedScenario = _.cloneDeep(scenarioTemplate);
+
+                                        updatedScenario.examples = [_.cloneDeep(example)];
+                                        updatedScenario.examples[0].tableBody = [row];
+
+                                        updatedScenario.tags = [
+                                            ...(scenario.tags || []),
+                                            ...featureTemplate.feature.tags,
+                                            ...(example.tags || [])
+                                        ];
+
+                                        feature.feature.children.push(updatedScenario);
+                                        features.push(feature);
+                                    });
+                                });
+                            }
+                            // CASE 2: Untagged Examples → split rows once
+                            else {
+                                const allRows = scenario.examples.flatMap(example => example.tableBody);
+
+                                allRows.forEach(row => {
+                                    const feature = _.cloneDeep(featureTemplate);
+                                    const updatedScenario = _.cloneDeep(scenarioTemplate);
+
+                                    // Keep only this row in examples
+                                    updatedScenario.examples = [_.cloneDeep(scenario.examples[0])];
+                                    updatedScenario.examples[0].tableBody = [row];
+
+                                    // Merge scenario + feature tags (no example tags)
+                                    updatedScenario.tags = [
+                                        ...(scenario.tags || []),
+                                        ...featureTemplate.feature.tags
+                                    ];
+
+                                    feature.feature.children.push(updatedScenario);
+                                    features.push(feature);
+                                });
+                            }
+
+                        } else {
+                            // CASE 3: Keep ScenarioOutline intact
+                            const feature = _.cloneDeep(featureTemplate);
+                            const updatedScenario = _.cloneDeep(scenarioTemplate);
+
+                            // Merge tags: scenario tags + feature tags
+                            updatedScenario.tags = [
+                                ...(scenario.tags || []),
+                                ...featureTemplate.feature.tags
+                            ];
+
+                            // Only merge example tags if the combined scenario+example tags satisfy the tagExpression
+                            scenario.examples.forEach(example => {
+                                const combinedTags = [
+                                    ...(scenario.tags || []).map(t => t.name),
+                                    ...(example.tags || []).map(t => t.name)
+                                ];
+                                const requiredTags = tagExpression.split(/\s+and\s+/).map(t => t.trim());
+
+                                const matches = requiredTags.every(tag => combinedTags.includes(tag));
+
+                                if (matches) {
+                                    updatedScenario.tags = updatedScenario.tags.concat(example.tags || []);
+                                }
+                            });
+
+                            feature.feature.children.push(updatedScenario);
+                            features.push(feature);
+                        }
+                    } else {
+                        // Regular Scenario (not outline)
+                        const feature = _.cloneDeep(featureTemplate);
+                        const updatedScenario = _.cloneDeep(scenario);
+                        updatedScenario.tags = [...(scenario.tags || []), ...featureTemplate.feature.tags];
                         feature.feature.children.push(updatedScenario);
-                        modifiedScenarioWithExamples.push(feature);
-                    });
+                        features.push(feature);
+                    }
                 });
-                return modifiedScenarioWithExamples;
-            } else {
-                return _.flatten(scenarioOutline).map(function (scenario) {
-                    var feature = _.cloneDeep(featureTemplate);
-                    var updatedScenario = _.cloneDeep(scenario);
-                    updatedScenario.tags = [].concat(_toConsumableArray(scenario.tags)).concat(featureTemplate.feature.tags);
-                    feature.feature.children.push(updatedScenario);
-                    return feature;
-                });
-            }
+
+            return features;
         } catch (e) {
-            console.log('Error: ', e);
+            console.log('Error in splitFeature:', e);
         }
     };
 
@@ -204,55 +266,52 @@ var featureFileSplitter = function featureFileSplitter() {
      */
     this.writeFeature = function (feature) {
         try {
-            var LINE_DELIMITER = "\n";
+            const LINE_DELIMITER = "\n";
 
-            var featureString = "";
+            let featureString = "";
 
             if (feature.tags) {
-                feature.tags.forEach(function (tag) {
-                    featureString += "" + tag.name + LINE_DELIMITER;
+                feature.tags.forEach(tag => {
+                    featureString += `${tag.name}${LINE_DELIMITER}`
                 });
             }
-            featureString += feature.type + ": " + feature.name + LINE_DELIMITER;
+            featureString += `${feature.type}: ${feature.name}${LINE_DELIMITER}`;
 
-            feature.children.forEach(function (scenario) {
+            feature.children.forEach(scenario => {
                 if (scenario.tags) {
-                    scenario.tags.forEach(function (tag) {
-                        featureString += "" + tag.name + LINE_DELIMITER;
+                    scenario.tags.forEach(tag => {
+                        featureString += `${tag.name}${LINE_DELIMITER}`
                     });
                 }
-                featureString += scenario.keyword + ": " + scenario.name + LINE_DELIMITER;
-                scenario.steps.forEach(function (step) {
+                featureString += `${scenario.keyword}: ${scenario.name}${LINE_DELIMITER}`;
+                scenario.steps.forEach(step => {
                     if (step.argument != undefined) {
-                        featureString += "" + step.keyword + step.text + LINE_DELIMITER;
+                        featureString += `${step.keyword}${step.text}${LINE_DELIMITER}`;
                         if (step.argument.type === 'DataTable') {
-                            step.argument.rows.forEach(function (row) {
+                            step.argument.rows.forEach(row => {
                                 var cellData = '|';
-                                row.cells.forEach(function (cell) {
-                                    cellData += cell.value + '|';
+                                row.cells.forEach(cell => {
+                                    cellData += cell.value + '|'
                                 });
-                                featureString += "" + cellData + LINE_DELIMITER;
-                            });
+                                featureString += `${cellData}${LINE_DELIMITER}`;
+                            })
                         }
                         if (step.argument.type === 'DocString') {
-                            featureString += "\"\"\"" + ("" + LINE_DELIMITER) + step.argument.content + ("" + LINE_DELIMITER) + "\"\"\"" + ("" + LINE_DELIMITER);
+                            featureString += "\"\"\"" + `${LINE_DELIMITER}` + step.argument.content + `${LINE_DELIMITER}` + "\"\"\"" + `${LINE_DELIMITER}`;
+
                         }
                     } else {
-                        featureString += "" + step.keyword + step.text + LINE_DELIMITER;
+                        featureString += `${step.keyword}${step.text}${LINE_DELIMITER}`;
                     }
                 });
 
                 if (scenario.examples) {
-                    var example = scenario.examples[0];
-                    featureString += "Examples:" + LINE_DELIMITER;
-                    featureString += "|" + example.tableHeader.cells.map(function (cell) {
-                        return cell.value + "|";
-                    }).join("") + LINE_DELIMITER;
-                    example.tableBody.forEach(function (tableRow) {
-                        featureString += "|" + tableRow.cells.map(function (cell) {
-                            return cell.value + "|";
-                        }).join("") + LINE_DELIMITER;
-                    });
+                    const example = scenario.examples[0];
+                    featureString += `Examples:${LINE_DELIMITER}`;
+                    featureString += `|${example.tableHeader.cells.map(cell => `${cell.value}|`).join("")}${LINE_DELIMITER}`;
+                    example.tableBody.forEach(tableRow => {
+                        featureString += `|${tableRow.cells.map(cell => `${cell.value}|`).join("")}${LINE_DELIMITER}`;
+                    })
                 }
             });
 
@@ -260,7 +319,7 @@ var featureFileSplitter = function featureFileSplitter() {
         } catch (e) {
             console.log('Error: ', e);
         }
-    };
+    }
 
     /**
      * Filter features by tag expression
@@ -271,20 +330,41 @@ var featureFileSplitter = function featureFileSplitter() {
      */
     this.filterFeaturesByTag = function (features, tagExpression) {
         try {
-            var expressionNode = parser.parse(tagExpression);
-            return features.filter(function (feature) {
-                return feature.feature.children.some(function (scenario) {
+            const expressionNode = parser.parse(tagExpression);
+            return features.filter(feature => {
+                return feature.feature.children.some(scenario => {
                     if (scenario.tags) {
-                        return expressionNode.evaluate(scenario.tags.map(function (tag) {
-                            return tag.name;
-                        }));
+                        return expressionNode.evaluate(scenario.tags.map(tag => tag.name))
                     }
-                });
+                })
             });
         } catch (e) {
             console.log('Error: ', e);
         }
+    }
+
+    /**
+     * Checks if an example matches the tag expression
+     * @param {Object} example - Gherkin example object (with .tags)
+     * @param {string} tagExpression - tag expression string, e.g., "@A and @B and @C"
+     * @returns {boolean} - true if example matches the tag expression
+     */
+    this.exampleMatchesFilter = function (example, scenarioTags, tagExpression) {
+        if (!tagExpression) return false;
+
+        // Combine scenario + example tags
+        const combinedTags = new Set([
+            ...(scenarioTags || []).map(t => t.name),
+            ...(example.tags || []).map(t => t.name)
+        ]);
+
+        // Split the tag expression by 'and'
+        const requiredTags = tagExpression.split(/\s+and\s+/).map(t => t.trim());
+
+        // Check if all required tags exist in combined tags
+        return requiredTags.every(tag => combinedTags.has(tag));
     };
-};
+
+}
 
 module.exports = featureFileSplitter;
