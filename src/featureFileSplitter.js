@@ -22,7 +22,6 @@ let featureFileSplitter = function () {
     this.compile = function (options) {
         try {
 
-
             if (!options.sourceSpecDirectory) {
                 throw new Error("Features paths are not defined");
             }
@@ -41,14 +40,17 @@ let featureFileSplitter = function () {
             }
 
             const featureTexts = this.readFiles(filePaths);
+ 
             const asts = this.parseGherkinFiles(featureTexts, options.lang);
             var i = 1;
             var fileSequence = 0;
             var scenariosWithTagFound = false;
             asts.forEach(ast => {
+                
                 if (ast.feature != undefined || ast.feature != null) {
                     const featureTemplate = this.getFeatureTemplate(ast);
-                    const features = this.splitFeature(ast.feature.children, featureTemplate, options.splitScenarioOutLineMultipleExamples);
+                    const features = this.splitFeature(ast.feature.children, featureTemplate, options.splitScenarioOutLineMultipleExamples, options.tagExpression);
+
                     const filteredFeatures = this.filterFeaturesByTag(features, options.tagExpression);
                     if (filteredFeatures.length > 0) {
                         scenariosWithTagFound = true;
@@ -66,13 +68,12 @@ let featureFileSplitter = function () {
             });
 
             if (scenariosWithTagFound == false) {
-                console.log(chalk.bold.hex('#7D18FF')(`No Feature File found for tha Tag Expression: ${options.tagExpression}`));
+                console.log(chalk.bold.hex('#7D18FF')(`No Feature File found for the Tag Expression: ${options.tagExpression}`));
             }
         } catch (e) {
             console.log('Error: ', e);
         }
     }
-
 
     /**
      * Read file content by provided paths
@@ -129,66 +130,133 @@ let featureFileSplitter = function () {
      * Split feature
      * @param {Array} scenarios - list of scenarios
      * @param {Object} featureTemplate - template of feature
+     * @param {boolean} splitScenarioOutLineMultipleExamples - whether to split examples
      * @return {Array} - list of features
      * @private
      */
-    this.splitFeature = function (scenarios, featureTemplate, splitScenarioOutLineMultipleExamples) {
-
+    this.splitFeature = function (scenarios, featureTemplate, splitScenarioOutLineMultipleExamples, tagExpression) {
         try {
-            const scenarioOutLineWithExamples = [];
-            const scenarioOutline = scenarios
+            // console.log('=== splitFeature input scenarios ===');
+            // scenarios.forEach((s, idx) => {
+            //     console.log(
+            //         idx,
+            //         s.type,
+            //         s.name,
+            //         'tags:', s.tags?.map(t => t.name),
+            //         'examples:', s.examples?.length
+            //     );
+            //     if (s.examples) {
+            //         s.examples.forEach((ex, exIdx) => {
+            //             console.log('  Example', exIdx,
+            //                 'tags:', ex.tags?.map(t => t.name),
+            //                 'rows:', ex.tableBody.map(r => r.cells.map(c => c.value))
+            //             );
+            //         });
+            //     }
+            // });
+
+            const features = [];
+
+            scenarios
                 .filter(scenario => scenario.type !== "Background")
-                .map(scenario => {
+                .forEach(scenario => {
                     if (scenario.type === "ScenarioOutline") {
                         const scenarioTemplate = _.cloneDeep(scenario);
-                        if (scenario.examples[0] == undefined || scenario.examples[0] == null) {
-                            console.log("Gherkin syntax error : Missing examples for Scenario Outline :", scenario.name);
-                            process.exit(0);
+
+                        if (!scenario.examples || scenario.examples.length === 0) {
+                            console.warn("Missing examples for Scenario Outline:", scenario.name);
+                            return;
                         }
-                        if (scenario.examples.length > 1 && splitScenarioOutLineMultipleExamples == true) {
+                        if ( splitScenarioOutLineMultipleExamples ) {
+                            // CASE 1: Tagged Examples → split and merge tags
+                            const hasTaggedExamples = scenario.examples.some(ex => ex.tags && ex.tags.length > 0);
+                            if (hasTaggedExamples) {
+                                scenario.examples.forEach(example => {
+                                    example.tableBody.forEach(row => {
+                                        const feature = _.cloneDeep(featureTemplate);
+                                        const updatedScenario = _.cloneDeep(scenarioTemplate);
+
+                                        updatedScenario.examples = [_.cloneDeep(example)];
+                                        updatedScenario.examples[0].tableBody = [row];
+
+                                        updatedScenario.tags = [
+                                            ...(scenario.tags || []),
+                                            ...featureTemplate.feature.tags,
+                                            ...(example.tags || [])
+                                        ];
+
+                                        feature.feature.children.push(updatedScenario);
+                                        features.push(feature);
+                                    });
+                                });
+                            }
+                            // CASE 2: Untagged Examples → split rows once
+                            else {
+                                const allRows = scenario.examples.flatMap(example => example.tableBody);
+
+                                allRows.forEach(row => {
+                                    const feature = _.cloneDeep(featureTemplate);
+                                    const updatedScenario = _.cloneDeep(scenarioTemplate);
+
+                                    // Keep only this row in examples
+                                    updatedScenario.examples = [_.cloneDeep(scenario.examples[0])];
+                                    updatedScenario.examples[0].tableBody = [row];
+
+                                    // Merge scenario + feature tags (no example tags)
+                                    updatedScenario.tags = [
+                                        ...(scenario.tags || []),
+                                        ...featureTemplate.feature.tags
+                                    ];
+
+                                    feature.feature.children.push(updatedScenario);
+                                    features.push(feature);
+                                });
+                            }
+
+                        } else {
+                            // CASE 3: Keep ScenarioOutline intact
+                            const feature = _.cloneDeep(featureTemplate);
+                            const updatedScenario = _.cloneDeep(scenarioTemplate);
+
+                            // Merge tags: scenario tags + feature tags
+                            updatedScenario.tags = [
+                                ...(scenario.tags || []),
+                                ...featureTemplate.feature.tags
+                            ];
+
+                            // Only merge example tags if the combined scenario+example tags satisfy the tagExpression
                             scenario.examples.forEach(example => {
-                                const modifiedScenario = _.cloneDeep(scenarioTemplate);
-                                    modifiedScenario.examples = [];
-                                    modifiedScenario.examples[0] = example;
-                                    scenarioOutLineWithExamples.push(modifiedScenario);
-                            });                            
+                                const combinedTags = [
+                                    ...(scenario.tags || []).map(t => t.name),
+                                    ...(example.tags || []).map(t => t.name)
+                                ];
+                                const requiredTags = tagExpression.split(/\s+and\s+/).map(t => t.trim());
+
+                                const matches = requiredTags.every(tag => combinedTags.includes(tag));
+
+                                if (matches) {
+                                    updatedScenario.tags = updatedScenario.tags.concat(example.tags || []);
+                                }
+                            });
+
+                            feature.feature.children.push(updatedScenario);
+                            features.push(feature);
                         }
-                        return scenario.examples[0].tableBody.map(row => {
-                            const modifiedScenario = _.cloneDeep(scenarioTemplate);
-                            modifiedScenario.examples[0].tableBody = [row];
-                            return modifiedScenario;
-                        })
-                    } else return scenario
-                });
-            if (scenarioOutLineWithExamples.length > 0 && splitScenarioOutLineMultipleExamples == true) {
-                const modifiedScenarioWithExamples = [];
-                scenarioOutLineWithExamples.forEach(scenarioWithExample => {
-                    _.flatten(scenarioWithExample).map(scenario => {
+                    } else {
+                        // Regular Scenario (not outline)
                         const feature = _.cloneDeep(featureTemplate);
                         const updatedScenario = _.cloneDeep(scenario);
-                        updatedScenario.tags = [...scenario.tags].concat(featureTemplate.feature.tags);
-                        if(scenario.examples && scenario.examples.length > 1 && scenario.examples[0].tags) {
-                            updatedScenario.tags = updatedScenario.tags.concat(scenario.examples[0].tags);
-                        }
+                        updatedScenario.tags = [...(scenario.tags || []), ...featureTemplate.feature.tags];
                         feature.feature.children.push(updatedScenario);
-                        modifiedScenarioWithExamples.push(feature)
-                    });
+                        features.push(feature);
+                    }
                 });
-                return modifiedScenarioWithExamples;
-            } else {
-                return _.flatten(scenarioOutline)
-                    .map(scenario => {
-                        const feature = _.cloneDeep(featureTemplate);
-                        const updatedScenario = _.cloneDeep(scenario);
-                        updatedScenario.tags = [...scenario.tags].concat(featureTemplate.feature.tags);
-                        feature.feature.children.push(updatedScenario);
-                        return feature
-                    });
-            }
+
+            return features;
         } catch (e) {
-            console.log('Error: ', e);
+            console.log('Error in splitFeature:', e);
         }
-    }
+    };
 
     /**
      * Write features to files
@@ -275,7 +343,28 @@ let featureFileSplitter = function () {
         }
     }
 
-}
+    /**
+     * Checks if an example matches the tag expression
+     * @param {Object} example - Gherkin example object (with .tags)
+     * @param {string} tagExpression - tag expression string, e.g., "@A and @B and @C"
+     * @returns {boolean} - true if example matches the tag expression
+     */
+    this.exampleMatchesFilter = function (example, scenarioTags, tagExpression) {
+        if (!tagExpression) return false;
 
+        // Combine scenario + example tags
+        const combinedTags = new Set([
+            ...(scenarioTags || []).map(t => t.name),
+            ...(example.tags || []).map(t => t.name)
+        ]);
+
+        // Split the tag expression by 'and'
+        const requiredTags = tagExpression.split(/\s+and\s+/).map(t => t.trim());
+
+        // Check if all required tags exist in combined tags
+        return requiredTags.every(tag => combinedTags.has(tag));
+    };
+
+}
 
 module.exports = featureFileSplitter;
